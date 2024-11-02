@@ -1,6 +1,7 @@
 # Importamos las librerías necesarias para la API
+import pymysql
 from flask import Flask, jsonify, request  # Flask para la API y JSON para las respuestas
-from flask_mysqldb import MySQL  # Conector MySQL para Flask
+from pymysql  # Conector MySQL para Flask
 from flask_cors import CORS  # Permitir solicitudes desde diferentes dominios (CORS)
 import config  # Archivo de configuración separado para las credenciales de MySQL
 
@@ -17,7 +18,13 @@ app.config['MYSQL_PASSWORD'] = config.MYSQL_PASSWORD
 app.config['MYSQL_DB'] = config.MYSQL_DB
 
 # Inicializamos MySQL con la configuración de la aplicación Flask
-mysql = MySQL(app)
+mysql = pymysql.connect(
+    host=app.config['MYSQL_HOST'],
+    port=3306,
+    user=app.config['MYSQL_USER'],
+    passwd=app.config['MYSQL_PASSWORD'],
+    db=app.config['MYSQL_DB']
+)
 
 # Ruta GET: Obtener todos los usuarios de la base de datos
 @app.route('/api/users', methods=['GET'])
@@ -25,7 +32,7 @@ def get_users():
     """
     Recupera todos los usuarios de la tabla 'users' y los devuelve como JSON.
     """
-    cursor = mysql.connection.cursor()  # Inicializa el cursor
+    cursor = mysql.cursor()  # Inicializa el cursor
     cursor.execute('SELECT * FROM users')  # Ejecuta la consulta SQL
     users = cursor.fetchall()  # Recupera todas las filas
 
@@ -35,7 +42,8 @@ def get_users():
         result.append({
             'id': user[0],
             'name': user[1],
-            'email': user[2]
+            'email': user[2],
+            'image': user[3]
         })
 
     return jsonify(result), 200  # Devolvemos el resultado como JSON
@@ -46,11 +54,15 @@ def get_user(id):
     """
     Recupera un usuario por su ID.
     """
-    cursor = mysql.connection.cursor()  # Inicializa el cursor
+    cursor = mysql.cursor()  # Inicializa el cursor
     cursor.execute('SELECT * FROM users WHERE id = %s', (id,))  # Consulta SQL con parámetro
     user = cursor.fetchone()  # Obtiene un solo usuario
     if user:
-        result = {'id': user[0], 'name': user[1], 'email': user[2]}  # Formato JSON del usuario
+        result = {
+            'id': user[0],
+            'name': user[1],
+            'email': user[2]
+        }  # Formato JSON del usuario
         return jsonify(result), 200  # Respuesta con estado 200 si el usuario existe
     return jsonify({'error': 'Usuario no encontrado'}), 404  # Estado 404 si no existe
 
@@ -110,6 +122,28 @@ def delete_user(id):
     cursor.execute('DELETE FROM users WHERE id = %s', (id,))
     mysql.connection.commit()  # Confirma los cambios
     return jsonify({'message': 'Usuario eliminado exitosamente'}), 200  # Estado 200: OK
+
+# Ruta POST: Login
+@app.route('/api/login', methods=['POST'])
+def login():
+    """
+    Agrega un nuevo usuario con 'name' y 'email' al sistema.
+    """
+    data = request.get_json()  # Obtenemos los datos del cuerpo de la solicitud en formato JSON
+    email = data.get('email')  # Extraemos el nombre
+    password = data.get('password')  # Extraemos el email
+
+    # Verificamos si los campos necesarios están presentes
+    if not email or not password:
+        return jsonify({'error': 'Verifique los campos'}), 400  # Error 400: Solicitud incorrecta
+
+    cursor = mysql.connection.cursor()  # Inicializa el cursor
+    cursor.execute('SELECT * FROM users WHERE email = %s AND password = %s', (email,password))
+    user = cursor.fetchone()  # Recupera el usuario
+    if not user:
+        return jsonify({'error': 'Verifique la información ingresada'}), 404
+
+    return jsonify({'message': 'Bienvenido'}), 200
 
 # Punto de entrada de la aplicación
 if __name__ == '__main__':
